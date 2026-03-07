@@ -2,7 +2,7 @@
 
 ## 1. 项目概述
 
-YAccount 是一款本地记账 Flutter 应用，支持 Android 和 iOS 平台，采用 SQLite 本地数据库存储数据，确保用户隐私安全。
+YAccount 是一款本地记账 Flutter 应用，支持 Android 和 Windows 平台，采用 SQLite 本地数据库存储数据，确保用户隐私安全。
 
 ### 主要功能
 - 记账：支持支出/收入记录，分类管理
@@ -13,9 +13,10 @@ YAccount 是一款本地记账 Flutter 应用，支持 Android 和 iOS 平台，
 
 ### 技术特点
 - 状态管理：Provider
-- 本地存储：SQLite (sqflite)
+- 本地存储：SQLite (sqflite / sqflite_common_ffi)
 - 图表：fl_chart
 - 数据格式：CSV、Excel
+- 桌面端：Windows 桌面应用
 
 ---
 
@@ -24,7 +25,8 @@ YAccount 是一款本地记账 Flutter 应用，支持 Android 和 iOS 平台，
 - Flutter SDK: ^3.11.1
 - Dart SDK: ^3.11.1
 - Android SDK: 最新稳定版
-- Xcode: 最新稳定版（iOS 开发用）
+# 不支持 iOS 开发
+- Visual Studio 2022（Windows 开发用）
 
 ---
 
@@ -52,6 +54,8 @@ yaccount/
 │   │   ├── app_provider.dart      # 应用全局状态
 │   │   ├── transaction_provider.dart  # 交易数据管理
 │   │   └── budget_provider.dart   # 预算数据管理
+│   ├── platform/
+│   │   └── desktop_config.dart    # 桌面端配置
 │   ├── utils/
 │   │   ├── constants.dart         # 常量配置（颜色、货币等）
 │   │   └── date_utils.dart        # 日期工具函数
@@ -59,8 +63,10 @@ yaccount/
 │       ├── common_widgets.dart     # 通用组件
 │       └── category_selector.dart  # 分类选择器
 ├── android/                      # Android 平台配置
-├── ios/                          # iOS 平台配置
+# iOS 平台配置（暂不支持）
+├── windows/                      # Windows 平台配置
 ├── pubspec.yaml                  # 项目依赖配置
+├── yaccount.iss                  # Inno Setup 安装包脚本
 └── analysis_options.yaml         # 代码规范配置
 ```
 
@@ -78,7 +84,8 @@ dependencies:
     sdk: flutter
 
   # 数据库
-  sqflite: ^2.4.2           # SQLite 数据库
+  sqflite: ^2.4.2           # SQLite 数据库 (Android)
+  sqflite_common_ffi: ^2.3.4+1  # SQLite FFI (桌面端)
   path: ^1.9.1              # 路径处理
 
   # 状态管理
@@ -89,7 +96,6 @@ dependencies:
 
   # 文件处理
   path_provider: ^2.1.5      # 应用目录访问
-  share_plus: ^10.1.4        # 系统分享
   file_picker: ^8.3.7        # 文件选择
 
   # 数据处理
@@ -97,10 +103,6 @@ dependencies:
   excel: ^4.0.6             # Excel 处理
   intl: ^0.20.2             # 国际化数字/日期格式
   uuid: ^4.5.1              # UUID 生成
-
-  # 安全
-  crypto: ^3.0.6             # 加密（用于数据库密钥派生）
-  flutter_secure_storage: ^9.2.4  # 安全存储
 
   # UI
   flutter_slidable: ^3.1.2   # 滑动操作组件
@@ -110,8 +112,16 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  sqflite_common_ffi: ^2.3.4+1  # 测试用
+  sqflite_common_ffi: ^2.3.4+1  # 桌面端测试
 ```
+
+### 依赖说明
+
+| 依赖 | 用途 | 平台差异 |
+|------|------|----------|
+| sqflite | SQLite 数据库 | Android |
+| sqflite_common_ffi | SQLite FFI | Windows/Linux |
+| window_manager | 窗口管理 | ~~已移除（构建问题）~~ |
 
 ---
 
@@ -222,7 +232,7 @@ CREATE TABLE budgets (
 ```sql
 CREATE TABLE categories (
   id TEXT PRIMARY KEY,           -- 分类 ID
-  name TEXT NOT NULL,           -- 分类名称
+  name TEXT NOT NULL,            -- 分类名称
   icon TEXT NOT NULL,            -- 图标名称
   color_value INTEGER NOT NULL   -- 颜色值
 );
@@ -250,36 +260,8 @@ CREATE TABLE settings (
 - 配置系统 UI（状态栏、屏幕方向）
 - 设置 MultiProvider 全局状态管理
 - 配置 MaterialApp（主题、本地化）
+- 桌面端 SQLite FFI 初始化
 - 处理启动画面和初始化流程
-
-**关键代码结构：**
-```dart
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(...);
-  SystemChrome.setPreferredOrientations([...]);
-  runApp(const YAccountApp());
-}
-
-class YAccountApp extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => AppProvider()..initialize()),
-        ChangeNotifierProvider(create: (_) => TransactionProvider()),
-        ChangeNotifierProvider(create: (_) => BudgetProvider()),
-        ChangeNotifierProvider(create: (_) => CurrencyManager.instance),
-      ],
-      child: MaterialApp(
-        // 主题配置
-        // 本地化配置
-        home: const _AppWrapper(),
-      ),
-    );
-  }
-}
-```
 
 ### 7.2 数据库操作 (database_helper.dart)
 
@@ -291,34 +273,7 @@ class YAccountApp extends StatelessWidget {
 - 预算管理
 - 统计数据查询
 - 设置存储
-
-**核心方法：**
-```dart
-class DatabaseHelper {
-  static final DatabaseHelper _instance = DatabaseHelper._internal();
-  
-  // 获取数据库实例
-  Future<Database> get database async {...}
-  
-  // 交易 CRUD
-  Future<int> insertTransaction(TransactionModel transaction);
-  Future<List<TransactionModel>> getTransactions({int page, int pageSize, String? type, DateTime? startDate, DateTime? endDate});
-  Future<int> updateTransaction(TransactionModel transaction);
-  Future<int> deleteTransaction(String id);
-  Future<void> insertTransactionsBatch(List<TransactionModel> transactions);  // 批量插入（事务优化）
-  
-  // 统计查询
-  Future<Map<String, double>> getStatistics({required DateTime startDate, required DateTime endDate});
-  Future<Map<String, double>> getCategoryStatistics({...});
-  Future<List<Map<String, dynamic>>> getMonthlyStatistics(int months);
-  Future<Map<String, double>> getDailyExpenseTrend({...});
-  
-  // 预算 CRUD
-  Future<void> setBudget(BudgetModel budget);
-  Future<BudgetModel?> getBudget(int month, {String? category});
-  Future<List<BudgetModel>> getBudgets(int month);
-}
-```
+- 桌面端使用 sqflite_common_ffi
 
 ### 7.3 状态管理 (providers/)
 
@@ -350,7 +305,7 @@ class DatabaseHelper {
 | statistics_page.dart | 统计分析，饼图、柱状图、折线图 |
 | budget_page.dart | 预算管理，设置月度预算 |
 | import_export_page.dart | 数据导入导出（CSV/Excel） |
-| settings_page.dart | 设置页面 |
+| settings_page.dart | 设置页面，包含桌面端加密说明 |
 
 ### 7.5 工具函数 (utils/)
 
@@ -366,118 +321,45 @@ class DatabaseHelper {
 
 ---
 
-## 8. 实现方法详解
+## 8. 平台差异说明
 
-### 8.1 状态管理
-
-采用 **Provider** 方案，使用 `ChangeNotifier` 实现响应式状态管理。
+### 8.1 桌面端配置 (desktop_config.dart)
 
 ```dart
-// 在 main.dart 中配置
-MultiProvider(
-  providers: [
-    ChangeNotifierProvider(create: (_) => TransactionProvider()),
-    // ...
-  ],
-  child: MyApp(),
-)
+class DesktopConfig {
+  static bool get isDesktop =>
+      Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 
-// 在页面中使用
-Consumer<TransactionProvider>(
-  builder: (context, provider, _) {
-    return Text('${provider.monthStats['expense']}');
-  },
-)
-```
-
-### 8.2 分页加载
-
-历史记录采用分页加载优化性能：
-
-```dart
-// TransactionProvider 中
-static const int _pageSize = 20;
-Future<void> loadTransactions({bool refresh = false, ...}) async {
-  if (refresh) {
-    _currentPage = 0;
-    _transactions = [];
+  static Future<void> initialize() async {
+    // 初始化 SQLite FFI（桌面端必需）
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
   }
-  final newTransactions = await _db.getTransactions(
-    page: _currentPage,
-    pageSize: _pageSize,
-    ...
-  );
-  _transactions.addAll(newTransactions);
-  _currentPage++;
 }
 ```
 
-### 8.3 数据导入导出
+### 8.2 数据库差异
 
-**导出流程：**
-1. 从数据库获取所有交易记录
-2. 转换为 CSV/Excel 格式
-3. 保存到应用文档目录
-4. 用户选择保存或分享
+| 平台 | 数据库包 | 加密支持 |
+|------|----------|----------|
+| Android | sqflite | ✅ 支持 (SQLCipher) |
+# iOS 平台暂不支持
+| Windows | sqflite_common_ffi | ❌ 不支持 |
+| Linux | sqflite_common_ffi | ❌ 不支持 |
 
-**导入流程：**
-1. 用户选择 CSV/Excel 文件
-2. 解析文件内容
-3. 显示导入模式选择（增量追加/覆盖替换）
-4. 批量插入数据库
+**注意：** 桌面端暂不支持数据库加密功能。设置页面会显示相应提示。
 
-**分类映射：**
-```dart
-String _mapCategory(String category) {
-  final mapping = {
-    '餐饮': 'food',
-    '交通': 'transport',
-    '消费': 'shopping',
-    '医疗': 'medical',
-    '生活费': 'living',
-    '薪水': 'salary',
-    '投资': 'investment',
-    '其他': 'other',
-  };
-  return mapping[category] ?? category;
-}
-```
+### 8.3 CSV 导出
 
-### 8.4 金额格式化
-
-提供三种格式化函数：
-
-| 函数 | 用途 | 规则 |
-|------|------|------|
-| `formatAmount` | 通用格式化 | 1000+，显示 K/M/Y |
-| `formatAmountRaw` | 历史记录显示 | 保留原始数值，千位分隔符 |
-| `formatAmountCompact` | 首页结余 | 1万亿+显示特殊文案 |
-
-### 8.5 图表实现
-
-使用 **fl_chart** 库：
-
-- **饼图 (PieChart)：** 分类支出占比
-- **柱状图 (BarChart)：** 月度收支对比
-- **折线图 (LineChart)：** 每日/每月支出趋势
+桌面端导出 CSV 已修复中文乱码问题：
+- 添加 BOM 标记 (`\uFEFF`)
+- 使用 UTF-8 编码保存文件
 
 ---
 
-## 9. 关键技术选型
+## 9. 构建命令
 
-| 技术 | 选型 | 理由 |
-|------|------|------|
-| 状态管理 | Provider | 简单易用，官方推荐 |
-| 数据库 | sqflite | SQLite 本地存储，离线可用，保护隐私 |
-| 图表 | fl_chart | 功能丰富，性能好 |
-| 导入导出 | csv + excel | 通用格式，方便用户 |
-| 国际化 | flutter_localizations | 官方支持 |
-
----
-
-## 10. 运行和构建命令
-
-### 10.1 开发运行
+### 9.1 开发运行
 
 ```bash
 # 获取依赖
@@ -485,9 +367,13 @@ flutter pub get
 
 # 运行应用
 flutter run
+
+# 指定平台运行
+flutter run -d windows
+flutter run -d android
 ```
 
-### 10.2 构建 APK
+### 9.2 构建 APK (Android)
 
 ```bash
 # Debug 包
@@ -497,24 +383,32 @@ flutter build apk --debug
 flutter build apk --release
 ```
 
-### 10.3 构建 iOS
+### 9.3 构建 Windows
 
 ```bash
-# iOS 模拟器
-flutter build ios --simulator --no-codesign
+# 启用 Windows 支持
+flutter config --enable-windows-desktop
 
-# iOS 真机（需要签名）
-flutter build ios --release
+# 构建
+flutter build windows --release
 ```
 
-### 10.4 输出路径
+### 9.4 构建安装包
+
+使用 Inno Setup 打包 Windows 安装包：
+
+1. 先构建 Release 版本：`flutter build windows --release`
+2. 用 Inno Setup 打开 `yaccount.iss` 编译
+
+### 9.5 输出路径
 
 - Android: `build/app/outputs/flutter-apk/app-release.apk`
-- iOS: `build/ios/iphoneos/Runner.app`
+- Windows: `build/windows/x64/runner/Release/`
+- 安装包: `installer/YAccount-Setup-1.3.0.exe`
 
 ---
 
-## 11. 版本信息
+## 10. 版本信息
 
 当前版本：**1.3.0**
 
@@ -536,12 +430,16 @@ flutter build ios --release
 - **预算卡片增强**：分类预算卡片增加"已花费/剩余"金额显示
 - **统计页面优化**：饼图左侧增加 16px 边距，改善视觉平衡
 - **导出功能优化**：导出文件直接保存到系统下载目录（使用 getDownloadsDirectory）
+- **CSV 导出修复**：添加 BOM 标记，解决中文乱码问题
+- **Windows 桌面端**：支持 Windows 10/11 平台
+- **移除分享功能**：简化导入导出页面
 
 ---
 
-## 12. 注意事项
+## 11. 注意事项
 
-1. **数据库加密**：当前版本未启用加密（如需启用，可使用 `sqflite_sqlcipher` 替代 `sqflite`）
+1. **数据库加密**：桌面端暂不支持加密（如需加密功能，请使用 Android 平台）
 2. **Web 平台**：不支持 Web 平台，运行时会有相应提示
 3. **网络访问**：导入导出功能不依赖网络，纯本地操作
 4. **数据备份**：建议定期使用导入导出功能备份数据
+5. **window_manager**：由于构建兼容性问题，当前版本桌面端暂不使用 window_manager
