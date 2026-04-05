@@ -17,12 +17,36 @@ class BudgetPage extends StatefulWidget {
 
 class _BudgetPageState extends State<BudgetPage> {
   late int _selectedMonth;
+  double _monthSpent = 0;
 
   @override
   void initState() {
     super.initState();
     _selectedMonth = context.read<BudgetProvider>().currentMonth;
     context.read<BudgetProvider>().loadBudgets(_selectedMonth);
+    _loadMonthSpent();
+  }
+
+  /// 加载选定月份的花费统计
+  Future<void> _loadMonthSpent() async {
+    final now = AppDateUtils.fromMonthInt(_selectedMonth);
+    final monthStart = DateTime(now.year, now.month, 1);
+    final monthEnd = DateTime(now.year, now.month + 1, 0);
+
+    final stats = await context.read<TransactionProvider>().getCategoryStats(
+      startDate: monthStart,
+      endDate: monthEnd,
+      type: 'expense',
+    );
+
+    // 计算总花费（所有分类的总和）
+    final totalSpent = stats.values.fold(0.0, (sum, value) => sum + value);
+
+    if (mounted) {
+      setState(() {
+        _monthSpent = totalSpent;
+      });
+    }
   }
 
   @override
@@ -35,10 +59,8 @@ class _BudgetPageState extends State<BudgetPage> {
         foregroundColor: AppConstants.textPrimary,
         elevation: 0,
       ),
-      body: Consumer3<BudgetProvider, TransactionProvider, CurrencyManager>(
-        builder: (context, budgetProvider, transactionProvider, currencyManager, _) {
-          final monthStats = transactionProvider.monthStats;
-          final spent = monthStats['expense'] ?? 0;
+      body: Consumer2<BudgetProvider, CurrencyManager>(
+        builder: (context, budgetProvider, currencyManager, _) {
           final totalBudget = budgetProvider.totalBudget;
 
           return SingleChildScrollView(
@@ -48,9 +70,9 @@ class _BudgetPageState extends State<BudgetPage> {
               children: [
                 _buildMonthSelector(),
                 const SizedBox(height: 20),
-                _buildTotalBudgetCard(spent, totalBudget?.amount ?? 0, budgetProvider, currencyManager),
+                _buildTotalBudgetCard(_monthSpent, totalBudget?.amount ?? 0, budgetProvider, currencyManager),
                 const SizedBox(height: 20),
-                _buildCategoryBudgets(spent, budgetProvider, transactionProvider),
+                _buildCategoryBudgets(budgetProvider),
               ],
             ),
           );
@@ -96,6 +118,7 @@ class _BudgetPageState extends State<BudgetPage> {
                     ).month;
               });
               context.read<BudgetProvider>().loadBudgets(_selectedMonth);
+              _loadMonthSpent();
             },
           ),
           Text(
@@ -117,6 +140,7 @@ class _BudgetPageState extends State<BudgetPage> {
                           ).month;
                     });
                     context.read<BudgetProvider>().loadBudgets(_selectedMonth);
+                    _loadMonthSpent();
                   }
                 : null,
           ),
@@ -202,7 +226,7 @@ class _BudgetPageState extends State<BudgetPage> {
     );
   }
 
-  Widget _buildCategoryBudgets(double totalSpent, BudgetProvider provider, TransactionProvider transactionProvider) {
+  Widget _buildCategoryBudgets(BudgetProvider provider) {
     final categoryBudgets = provider.budgets.where((b) => b.category != 'total');
 
     // 获取当前月份的开始和结束日期
@@ -210,8 +234,8 @@ class _BudgetPageState extends State<BudgetPage> {
     final monthStart = DateTime(now.year, now.month, 1);
     final monthEnd = DateTime(now.year, now.month + 1, 0);
 
-    return Consumer<CurrencyManager>(
-      builder: (context, currencyManager, _) {
+    return Consumer2<TransactionProvider, CurrencyManager>(
+      builder: (context, transactionProvider, currencyManager, _) {
         final symbol = currencyManager.current.symbol;
         return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

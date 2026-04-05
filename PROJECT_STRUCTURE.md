@@ -300,10 +300,10 @@ CREATE TABLE settings (
 | 页面 | 功能 |
 |------|------|
 | home_page.dart | 首页，包含底部导航和主页内容（收支概览、快速记账、预算进度） |
-| add_transaction_page.dart | 添加/编辑交易记录 |
+| add_transaction_page.dart | 添加/编辑交易记录，默认分类根据交易类型自动匹配 |
 | history_page.dart | 历史记录列表，支持分页加载和筛选 |
 | statistics_page.dart | 统计分析，饼图、柱状图、折线图 |
-| budget_page.dart | 预算管理，设置月度预算 |
+| budget_page.dart | 预算管理，设置月度预算，支持月份切换查看各月预算进度 |
 | import_export_page.dart | 数据导入导出（CSV/Excel） |
 | settings_page.dart | 设置页面，包含桌面端加密说明 |
 
@@ -404,13 +404,13 @@ flutter build windows --release
 
 - Android: `build/app/outputs/flutter-apk/app-release.apk`
 - Windows: `build/windows/x64/runner/Release/`
-- 安装包: `installer/YAccount-Setup-1.3.0.exe`
+- 安装包: `installer/YAccount-Setup-1.3.1.exe`
 
 ---
 
 ## 10. 版本信息
 
-当前版本：**1.3.0**
+当前版本：**1.3.1**
 
 版本格式：`major.minor.patch+build`
 
@@ -418,6 +418,13 @@ flutter build windows --release
 - minor：次版本号
 - patch：补丁版本号
 - build：构建号
+
+### v1.3.1 更新内容
+
+- **预算页面月份切换修复**：修复预算进度计算逻辑，现在正确显示选中月份的花费，而不是当前真实时间的花费
+- **添加交易默认分类优化**：支出默认选择"餐饮"分类，收入默认选择"薪水"分类
+
+---
 
 ### v1.3.0 更新内容
 

@@ -2,7 +2,7 @@
 ; 请先运行 flutter build windows 构建项目
 
 #define MyAppName "YAccount"
-#define MyAppVersion "1.3.0"
+#define MyAppVersion "1.3.1"
 #define MyAppPublisher "nsernamee"
 #define MyAppURL "https://github.com/nsernamee/yaccount-windowsDesktop"
 #define MyAppExeName "yaccount.exe"
